@@ -16,7 +16,10 @@ export default function App() {
           <h1>COMMS SIMULATOR</h1>
           <p>Modulation · AWGN channel · constellation diagrams · Monte-Carlo BER vs theory</p>
         </div>
-        <span className="src">ECE Portfolio · Dhananjay Seth</span>
+        <div className="badges">
+          <a className="labbench-badge" href="https://labbench-hub.vercel.app/" target="_blank" rel="noopener noreferrer">⚡ LabBench</a>
+          <a className="src" href="https://dhananjay-kumar-seth.vercel.app/" target="_blank" rel="noopener noreferrer">ECE Portfolio · Dhananjay Seth</a>
+        </div>
       </header>
       <nav className="tabs">
         {TABS.map((t) => <button key={t} className={t === tab ? "on" : ""} onClick={() => setTab(t)}>{t}</button>)}
