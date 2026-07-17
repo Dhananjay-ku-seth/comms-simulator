@@ -2,12 +2,33 @@ import { useEffect, useRef, useState } from "react";
 import {
   Scheme, SCHEMES, idealPoints, scatter, berSim, berTheory, sigmaFor,
 } from "./comms";
+import AuthPanel from "./AuthPanel";
+import SavePreset, { type CommsConfig } from "./SavePreset";
 
 type Tab = "Analog" | "Constellation" | "BER Curve";
 const TABS: Tab[] = ["Analog", "Constellation", "BER Curve"];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("Analog");
+
+  const [analogType, setAnalogType] = useState<"AM" | "FM">("AM");
+  const [analogFm, setAnalogFm] = useState(3);
+  const [analogFc, setAnalogFc] = useState(30);
+  const [analogIdx, setAnalogIdx] = useState(0.7);
+
+  const [constScheme, setConstScheme] = useState<Scheme>("16-QAM");
+  const [constSnr, setConstSnr] = useState(18);
+  const [constN, setConstN] = useState(1200);
+
+  const [berScheme, setBerScheme] = useState<Scheme>("BPSK");
+
+  function loadConfig(c: CommsConfig) {
+    setTab(c.tab);
+    setAnalogType(c.analog.type); setAnalogFm(c.analog.fm); setAnalogFc(c.analog.fc); setAnalogIdx(c.analog.idx);
+    setConstScheme(c.constellation.scheme); setConstSnr(c.constellation.snr); setConstN(c.constellation.n);
+    setBerScheme(c.ber.scheme);
+  }
+
   return (
     <div className="app">
       <header>
@@ -17,27 +38,46 @@ export default function App() {
           <p>Modulation · AWGN channel · constellation diagrams · Monte-Carlo BER vs theory</p>
         </div>
         <div className="badges">
-          <a className="labbench-badge" href="https://labbench-hub.vercel.app/" target="_blank" rel="noopener noreferrer">⚡ LabBench</a>
-          <a className="src" href="https://dhananjay-kumar-seth.vercel.app/" target="_blank" rel="noopener noreferrer">ECE Portfolio · Dhananjay Seth</a>
+          <AuthPanel />
+          <div className="badge-links">
+            <a className="labbench-badge" href="https://labbench-hub.vercel.app/" target="_blank" rel="noopener noreferrer">⚡ LabBench</a>
+            <a className="src" href="https://dhananjay-kumar-seth.vercel.app/" target="_blank" rel="noopener noreferrer">ECE Portfolio · Dhananjay Seth</a>
+          </div>
         </div>
       </header>
+      <div className="savebar">
+        <SavePreset
+          config={{
+            tab,
+            analog: { type: analogType, fm: analogFm, fc: analogFc, idx: analogIdx },
+            constellation: { scheme: constScheme, snr: constSnr, n: constN },
+            ber: { scheme: berScheme },
+          }}
+          onLoad={loadConfig}
+        />
+      </div>
       <nav className="tabs">
         {TABS.map((t) => <button key={t} className={t === tab ? "on" : ""} onClick={() => setTab(t)}>{t}</button>)}
       </nav>
-      {tab === "Analog" && <Analog />}
-      {tab === "Constellation" && <Constellation />}
-      {tab === "BER Curve" && <BER />}
+      {tab === "Analog" && (
+        <Analog type={analogType} fm={analogFm} fc={analogFc} idx={analogIdx}
+          setType={setAnalogType} setFm={setAnalogFm} setFc={setAnalogFc} setIdx={setAnalogIdx} />
+      )}
+      {tab === "Constellation" && (
+        <Constellation scheme={constScheme} snr={constSnr} n={constN}
+          setScheme={setConstScheme} setSnr={setConstSnr} setN={setConstN} />
+      )}
+      {tab === "BER Curve" && <BER scheme={berScheme} setScheme={setBerScheme} />}
       <footer>Unit-energy symbols · AWGN via Box–Muller · Q(x)=½·erfc(x/√2) · all math from scratch, no DSP libraries.</footer>
     </div>
   );
 }
 
 // ---------------- Analog AM / FM ----------------
-function Analog() {
-  const [type, setType] = useState<"AM" | "FM">("AM");
-  const [fm, setFm] = useState(3);
-  const [fc, setFc] = useState(30);
-  const [idx, setIdx] = useState(0.7);
+function Analog({ type, fm, fc, idx, setType, setFm, setFc, setIdx }: {
+  type: "AM" | "FM"; fm: number; fc: number; idx: number;
+  setType: (v: "AM" | "FM") => void; setFm: (v: number) => void; setFc: (v: number) => void; setIdx: (v: number) => void;
+}) {
   const cv = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -105,10 +145,10 @@ function Analog() {
 }
 
 // ---------------- Constellation ----------------
-function Constellation() {
-  const [scheme, setScheme] = useState<Scheme>("16-QAM");
-  const [snr, setSnr] = useState(18);
-  const [n, setN] = useState(1200);
+function Constellation({ scheme, snr, n, setScheme, setSnr, setN }: {
+  scheme: Scheme; snr: number; n: number;
+  setScheme: (v: Scheme) => void; setSnr: (v: number) => void; setN: (v: number) => void;
+}) {
   const [errRate, setErrRate] = useState(0);
   const cv = useRef<HTMLCanvasElement>(null);
 
@@ -166,8 +206,7 @@ function Constellation() {
 }
 
 // ---------------- BER curve ----------------
-function BER() {
-  const [scheme, setScheme] = useState<Scheme>("BPSK");
+function BER({ scheme, setScheme }: { scheme: Scheme; setScheme: (v: Scheme) => void }) {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<{ db: number; sim: number; th: number }[]>([]);
   const cv = useRef<HTMLCanvasElement>(null);
