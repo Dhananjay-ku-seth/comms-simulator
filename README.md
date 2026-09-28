@@ -9,14 +9,16 @@ Part of the [LabBench](https://labbench-hub.vercel.app/) suite of interactive en
 
 ## Features
 - **Analog** — AM & FM in the time domain, with the AM envelope and over-modulation shown live
-- **Constellation** — BPSK / QPSK / 16-QAM ideal points + received AWGN scatter, live symbol-error rate
-- **BER Curve** — Monte-Carlo (60k bits/point) vs the theoretical Q-function on a semilog plot
-- Unit-energy symbols, Gray-coded PAM-4, Box–Muller AWGN, `Q(x)=½·erfc(x/√2)`
+- **Constellation** — BPSK / QPSK / 16-QAM / 64-QAM ideal points + received AWGN scatter, live symbol-error rate
+- **BER Curve** — Monte-Carlo (60k bits/point) vs the theoretical Q-function on a semilog plot, with a
+  hover crosshair that reads out the exact simulated/theoretical BER at any Eb/N0
+- PNG export of every chart, CSV export of the BER curve data
+- Unit-energy symbols, Gray-coded PAM-4/PAM-8, Box–Muller AWGN, `Q(x)=½·erfc(x/√2)`
 
 ## LabBench Pro
 Sign in to save and reload a full session (Analog/Constellation/BER settings together) — part of the same
 optional ₹29/mo LabBench Pro subscription as the rest of the suite. Upgrade from
-[Logic Circuit Simulator](https://logic-circuit-sim.vercel.app/), which hosts the checkout for all 7 tools.
+[Logic Circuit Simulator](https://logic-circuit-sim.vercel.app/), which hosts the checkout for all 9 tools.
 
 ## Tech
 React + TypeScript + Vite. All DSP/communication math implemented from scratch — no libraries.

@@ -8,6 +8,18 @@ import SavePreset, { type CommsConfig } from "./SavePreset";
 type Tab = "Analog" | "Constellation" | "BER Curve";
 const TABS: Tab[] = ["Analog", "Constellation", "BER Curve"];
 
+function downloadCanvasPng(cv: HTMLCanvasElement | null, filename: string) {
+  if (!cv) return;
+  cv.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("Analog");
 
@@ -134,6 +146,7 @@ function Analog({ type, fm, fc, idx, setType, setFm, setFc, setIdx }: {
         <Slider label="Message freq  fm" v={fm} min={1} max={8} step={0.5} on={setFm} c="#38bdf8" />
         <Slider label="Carrier freq  fc" v={fc} min={12} max={60} step={1} on={setFc} c="#94a3b8" />
         <Slider label={type === "AM" ? "Mod index  μ" : "Mod index  β"} v={idx} min={0} max={type === "AM" ? 1.4 : 1} step={0.05} on={setIdx} c="#f472b6" />
+        <button className="export-btn" onClick={() => downloadCanvasPng(cv.current, `${type.toLowerCase()}-waveform.png`)}>⬇ PNG</button>
       </div>
       <p className="hint">
         {type === "AM"
@@ -194,6 +207,7 @@ function Constellation({ scheme, snr, n, setScheme, setSnr, setN }: {
           </div>
           <Slider label="Eb/N0 (SNR)" v={snr} min={0} max={30} step={0.5} unit=" dB" on={setSnr} c="#38bdf8" wide />
           <Slider label="Symbols" v={n} min={200} max={4000} step={100} on={setN} c="#94a3b8" wide />
+          <button className="export-btn" onClick={() => downloadCanvasPng(cv.current, `${scheme}-constellation.png`)}>⬇ PNG</button>
           <div className="readout">
             <div><span className="ro-v">{(errRate * 100).toFixed(2)}%</span><span className="ro-l">symbol errors (yellow=ideal, red=misread)</span></div>
             <div><span className="ro-v">{sigmaFor(scheme, snr).toFixed(3)}</span><span className="ro-l">noise σ per I/Q axis</span></div>
@@ -206,9 +220,16 @@ function Constellation({ scheme, snr, n, setScheme, setSnr, setN }: {
 }
 
 // ---------------- BER curve ----------------
+const BER_W = 880, BER_H = 360, BER_PAD = { l: 52, r: 14, t: 14, b: 34 };
+const berX0 = BER_PAD.l, berX1 = BER_W - BER_PAD.r, berY0 = BER_PAD.t, berY1 = BER_H - BER_PAD.b;
+const xdb = (db: number) => berX0 + (db / 14) * (berX1 - berX0);
+const dbFromX = (x: number) => Math.min(14, Math.max(0, ((x - berX0) / (berX1 - berX0)) * 14));
+const yber = (b: number) => { const e = Math.max(-5, Math.log10(Math.max(b, 1e-6))); return berY0 + (-e / 5) * (berY1 - berY0); };
+
 function BER({ scheme, setScheme }: { scheme: Scheme; setScheme: (v: Scheme) => void }) {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<{ db: number; sim: number; th: number }[]>([]);
+  const [hoverDb, setHoverDb] = useState<number | null>(null);
   const cv = useRef<HTMLCanvasElement>(null);
 
   function run() {
@@ -223,14 +244,14 @@ function BER({ scheme, setScheme }: { scheme: Scheme; setScheme: (v: Scheme) => 
   }
   useEffect(() => { run(); /* eslint-disable-next-line */ }, [scheme]);
 
+  const nearest = hoverDb === null || !data.length ? null
+    : data.reduce((best, d) => Math.abs(d.db - hoverDb) < Math.abs(best.db - hoverDb) ? d : best, data[0]);
+
   useEffect(() => {
     const c = cv.current!.getContext("2d")!;
-    const W = cv.current!.width, H = cv.current!.height;
-    const padL = 52, padB = 34, padT = 14, padR = 14;
+    const W = BER_W, H = BER_H;
     c.fillStyle = "#080d14"; c.fillRect(0, 0, W, H);
-    const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
-    const xdb = (db: number) => x0 + (db / 14) * (x1 - x0);
-    const yber = (b: number) => { const e = Math.max(-5, Math.log10(Math.max(b, 1e-6))); return y0 + (-e / 5) * (y1 - y0); };
+    const x0 = berX0, x1 = berX1, y0 = berY0, y1 = berY1;
     // grid
     c.strokeStyle = "#16202b"; c.fillStyle = "#3f5163"; c.font = "10px ui-monospace, monospace"; c.lineWidth = 1;
     for (let e = 0; e >= -5; e--) {
@@ -250,18 +271,50 @@ function BER({ scheme, setScheme }: { scheme: Scheme; setScheme: (v: Scheme) => 
     // legend
     c.fillStyle = "#38bdf8"; c.fillText("● simulated (Monte-Carlo)", x1 - 180, y0 + 14);
     c.fillStyle = "#94a3b8"; c.fillText("- - theoretical", x1 - 180, y0 + 30);
-  }, [data]);
+    // hover crosshair
+    if (nearest) {
+      const x = xdb(nearest.db);
+      c.strokeStyle = "#f472b688"; c.lineWidth = 1; c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y1); c.stroke();
+      for (const [v, color] of [[nearest.sim, "#38bdf8"], [nearest.th, "#94a3b8"]] as const) {
+        c.beginPath(); c.arc(x, yber(v), 5, 0, 7); c.strokeStyle = color; c.lineWidth = 2; c.stroke();
+      }
+    }
+  }, [data, nearest]);
+
+  function onMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    const r = cv.current!.getBoundingClientRect();
+    const x = (e.clientX - r.left) * (BER_W / r.width);
+    setHoverDb(dbFromX(x));
+  }
+
+  function exportCsv() {
+    if (!data.length) return;
+    const csv = ["db,simulated_ber,theoretical_ber", ...data.map((d) => `${d.db},${d.sim},${d.th}`)].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `${scheme}-ber-curve.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
   return (
     <div className="panel">
-      <canvas ref={cv} width={880} height={360} />
+      <canvas ref={cv} className="ber-canvas" width={BER_W} height={BER_H} onMouseMove={onMove} onMouseLeave={() => setHoverDb(null)} />
+      {nearest && (
+        <p className="ber-readout">
+          At <b>{nearest.db} dB</b> — simulated: <b>{(nearest.sim * 100).toPrecision(3)}%</b>,
+          theoretical: <b>{(nearest.th * 100).toPrecision(3)}%</b>
+        </p>
+      )}
       <div className="row">
         <div className="seg">
           {(Object.keys(SCHEMES) as Scheme[]).map((s) => <button key={s} className={scheme === s ? "on" : ""} onClick={() => setScheme(s)}>{s}</button>)}
         </div>
         <button className="run" onClick={run} disabled={busy}>{busy ? "Simulating…" : "↻ Re-run (60k bits/point)"}</button>
+        <button className="export-btn" onClick={() => downloadCanvasPng(cv.current, `${scheme}-ber-curve.png`)}>⬇ PNG</button>
+        <button className="export-btn" onClick={exportCsv}>⬇ CSV</button>
       </div>
-      <p className="hint">Each point transmits <b>60,000 random bits</b> through the AWGN channel and counts errors. The simulated curve should hug the <b>theoretical</b> one — and note <b>BPSK/QPSK</b> need ~4 dB less SNR than <b>16-QAM</b> for the same BER. That's the bit-rate-vs-power tradeoff at the heart of link design.</p>
+      <p className="hint">Each point transmits <b>60,000 random bits</b> through the AWGN channel and counts errors. The simulated curve should hug the <b>theoretical</b> one — and note <b>BPSK/QPSK</b> need ~4 dB less SNR than <b>16-QAM</b> for the same BER. That's the bit-rate-vs-power tradeoff at the heart of link design. Hover the chart to read exact values at any Eb/N0.</p>
     </div>
   );
 }
